@@ -1,0 +1,111 @@
+'use client';
+
+import Link from "next/link";
+import { usePathname } from "next/navigation";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { Separator } from "@/components/ui/separator";
+import { SidebarTrigger } from "@/components/ui/sidebar";
+import { IconBrandGithub } from "@tabler/icons-react";
+import {
+  Breadcrumb,
+  BreadcrumbList,
+  BreadcrumbItem,
+  BreadcrumbLink,
+  BreadcrumbPage,
+  BreadcrumbSeparator,
+} from "@/components/ui/breadcrumb";
+import { LogsIcon, BookOpenIcon } from "lucide-react";
+import { generateBreadcrumbs } from "@/lib/breadcrumb-utils";
+
+export function SiteHeader() {
+  const pathname = usePathname();
+  const isDemoMode = process.env.NEXT_PUBLIC_DEMO_MODE === 'true';
+  const breadcrumbs = generateBreadcrumbs(pathname);
+  
+  return (
+    <header className="sticky top-0 z-50 flex h-(--header-height) shrink-0 items-center gap-2 border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 transition-[width,height] ease-linear group-has-data-[collapsible=icon]/sidebar-wrapper:h-(--header-height)">
+      <div className="flex w-full items-center gap-1 px-4 lg:gap-2 lg:px-6">
+        <SidebarTrigger className="-ml-1" />
+        <Separator
+          orientation="vertical"
+          className="mx-2 data-[orientation=vertical]:h-4"
+        />
+        <Breadcrumb>
+          <BreadcrumbList>
+            {breadcrumbs.map((item, index) => (
+              <div key={index} className="flex items-center">
+                <BreadcrumbItem>
+                  {item.href ? (
+                    <BreadcrumbLink asChild>
+                      <Link href={item.href}>{item.label}</Link>
+                    </BreadcrumbLink>
+                  ) : (
+                    <BreadcrumbPage>{item.label}</BreadcrumbPage>
+                  )}
+                </BreadcrumbItem>
+                {index < breadcrumbs.length - 1 && <BreadcrumbSeparator />}
+              </div>
+            ))}
+          </BreadcrumbList>
+        </Breadcrumb>
+        
+        {/* Demo Mode Badge */}
+        {isDemoMode && (
+          <Badge variant="secondary" className="ml-2 bg-orange-100 text-orange-800 border-orange-200">
+            Demo Mode
+          </Badge>
+        )}
+        
+        <div className="ml-auto flex items-center gap-2">
+          {/* <Button
+            variant="secondary"
+            asChild
+            size="sm"
+            className="hidden sm:flex"
+          >
+            <a
+              href="/api-docs"
+              className="dark:text-foreground flex items-center gap-2"
+              title="API Documentation"
+            >
+              <BookOpenIcon className="h-4 w-4" />
+              API Docs
+            </a>
+          </Button> */}
+
+          <Button
+            variant="secondary"
+            asChild
+            size="sm"
+            className="hidden sm:flex"
+          >
+            <a
+              href="/audit-logs"
+              className="dark:text-foreground flex items-center gap-2"
+            >
+              <LogsIcon />
+            </a>
+          </Button>
+
+          <Button
+            variant="default"
+            asChild
+            size="sm"
+            className="hidden sm:flex"
+          >
+            <a
+              href="https://github.com/Karthick-MurugesanG/HarborGuard.git"
+              rel="noopener noreferrer"
+              target="_blank"
+              className="dark:text-foreground flex items-center gap-2"
+            >
+              <IconBrandGithub className="h-4 w-4" />
+              GitHub
+            </a>
+          </Button>
+        </div>
+      </div>
+    </header>
+  );
+}

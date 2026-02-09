@@ -1,0 +1,1133 @@
+generator client {
+  provider      = "prisma-client-js"
+  output        = "../src/generated/prisma"
+  binaryTargets = ["native", "debian-openssl-3.0.x", "debian-openssl-1.1.x", "linux-musl-openssl-3.0.x"]
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Image {
+  id                       String               @id @default(cuid())
+  name                     String
+  tag                      String
+  registry                 String?
+  registryType             String?              // Type of registry: DOCKERHUB, GHCR, ECR, GCR, etc
+  dockerImageId            String?              // Docker image ID for local images
+  source                   ImageSource          @default(REGISTRY)
+  digest                   String?               @unique
+  platform                 String?
+  sizeBytes                BigInt?
+  createdAt                DateTime             @default(now())
+  updatedAt                DateTime             @updatedAt
+  primaryRepositoryId      String?
+  bulkScanItems            BulkScanItem[]
+  cveClassifications       CveClassification[]
+  imageVulnerabilities     ImageVulnerability[]
+  primaryRepository        Repository?          @relation("PrimaryRepository", fields: [primaryRepositoryId], references: [id])
+  patchOperationsAsPatched PatchOperation[]     @relation("PatchedImage")
+  patchOperationsAsSource  PatchOperation[]     @relation("PatchSourceImage")
+  patchedImagesAsOriginal  PatchedImage[]       @relation("PatchedImageOriginal")
+  patchedImagesAsResult    PatchedImage?        @relation("PatchedImageResult")
+  repositoryImages         RepositoryImage[]
+  scans                    Scan[]
+  scheduledScanImages      ScheduledScanImage[]
+
+  @@index([name, tag])
+  @@index([name, tag, primaryRepositoryId])
+  @@index([digest])
+  @@index([source])
+  @@index([primaryRepositoryId])
+  @@map("images")
+}
+
+model Scan {
+  id                    String                     @id @default(cuid())
+  requestId             String                     @unique
+  imageId               String
+  startedAt             DateTime
+  finishedAt            DateTime?
+  status                ScanStatus                 @default(RUNNING)
+  reportsDir            String?
+  errorMessage          String?
+  riskScore             Int?
+  source                String?
+  createdAt             DateTime                   @default(now())
+  updatedAt             DateTime                   @updatedAt
+  metadataId            String?                    @unique
+  tag                   String                     @default("latest")
+  bulkScanItems         BulkScanItem[]
+  patchOperations       PatchOperation[]
+  complianceFindings    ScanComplianceFinding[]
+  efficiencyFindings    ScanEfficiencyFinding[]
+  findingCorrelations   ScanFindingCorrelation[]
+  packageFindings       ScanPackageFinding[]
+  scanResults           ScanResult[]
+  vulnerabilityFindings ScanVulnerabilityFinding[]
+  scheduledScanResults  ScheduledScanResult[]
+  image                 Image                      @relation(fields: [imageId], references: [id], onDelete: Cascade)
+  metadata              ScanMetadata?              @relation(fields: [metadataId], references: [id])
+
+  @@index([requestId])
+  @@index([status])
+  @@index([startedAt])
+  @@index([imageId])
+  @@index([imageId, status])
+  @@index([imageId, startedAt])
+  @@index([status, startedAt])
+  @@index([metadataId])
+  @@index([tag])
+  @@index([imageId, tag])
+  @@map("scans")
+}
+
+model ScanMetadata {
+  id                    String         @id @default(cuid())
+  dockerId              String?
+  dockerOs              String?
+  dockerArchitecture    String?
+  dockerSize            BigInt?
+  dockerAuthor          String?
+  dockerCreated         DateTime?
+  dockerVersion         String?
+  dockerParent          String?
+  dockerComment         String?
+  dockerDigest          String?
+  dockerConfig          Json?
+  dockerRootFS          Json?
+  dockerGraphDriver     Json?
+  dockerRepoTags        Json?
+  dockerRepoDigests     Json?
+  dockerMetadata        Json?
+  dockerLabels          Json?
+  dockerEnv             Json?
+  trivyResults          Json?
+  grypeResults          Json?
+  syftResults           Json?
+  dockleResults         Json?
+  osvResults            Json?
+  diveResults           Json?
+  vulnerabilityCritical Int            @default(0)
+  vulnerabilityHigh     Int            @default(0)
+  vulnerabilityMedium   Int            @default(0)
+  vulnerabilityLow      Int            @default(0)
+  vulnerabilityInfo     Int            @default(0)
+  complianceScore       Int?
+  complianceGrade       String?
+  complianceFatal       Int?
+  complianceWarn        Int?
+  complianceInfo        Int?
+  compliancePass        Int?
+  aggregatedRiskScore   Int?
+  scannerVersions       Json?
+  createdAt             DateTime       @default(now())
+  updatedAt             DateTime       @updatedAt
+  diveResult            DiveResults?
+  dockleResult          DockleResults?
+  grypeResult           GrypeResults?
+  osvResult             OsvResults?
+  scan                  Scan?
+  syftResult            SyftResults?
+  trivyResult           TrivyResults?
+
+  @@index([dockerDigest])
+  @@index([aggregatedRiskScore])
+  @@index([vulnerabilityCritical, vulnerabilityHigh])
+  @@map("scan_metadata")
+}
+
+model GrypeResults {
+  id              String               @id @default(cuid())
+  scanMetadataId  String               @unique
+  matchesCount    Int                  @default(0)
+  dbStatus        Json?
+  createdAt       DateTime             @default(now())
+  scanMetadata    ScanMetadata         @relation(fields: [scanMetadataId], references: [id], onDelete: Cascade)
+  vulnerabilities GrypeVulnerability[]
+
+  @@index([scanMetadataId])
+  @@map("grype_results")
+}
+
+model GrypeVulnerability {
+  id              String       @id @default(cuid())
+  grypeResultsId  String
+  vulnerabilityId String
+  severity        String
+  namespace       String?
+  packageName     String
+  packageVersion  String
+  packageType     String
+  packagePath     String?
+  packageLanguage String?
+  fixState        String?
+  fixVersions     Json?
+  cvssV2Score     Float?
+  cvssV2Vector    String?
+  cvssV3Score     Float?
+  cvssV3Vector    String?
+  urls            Json?
+  description     String?
+  grypeResult     GrypeResults @relation(fields: [grypeResultsId], references: [id], onDelete: Cascade)
+
+  @@index([grypeResultsId])
+  @@index([vulnerabilityId])
+  @@index([severity])
+  @@index([packageName])
+  @@map("grype_vulnerabilities")
+}
+
+model TrivyResults {
+  id                String                  @id @default(cuid())
+  scanMetadataId    String                  @unique
+  schemaVersion     Int?
+  artifactName      String?
+  artifactType      String?
+  createdAt         DateTime                @default(now())
+  misconfigurations TrivyMisconfiguration[]
+  scanMetadata      ScanMetadata            @relation(fields: [scanMetadataId], references: [id], onDelete: Cascade)
+  secrets           TrivySecret[]
+  vulnerabilities   TrivyVulnerability[]
+
+  @@index([scanMetadataId])
+  @@map("trivy_results")
+}
+
+model TrivyVulnerability {
+  id               String       @id @default(cuid())
+  trivyResultsId   String
+  targetName       String
+  targetClass      String?
+  targetType       String?
+  vulnerabilityId  String
+  pkgId            String?
+  pkgName          String
+  pkgPath          String?
+  installedVersion String?
+  fixedVersion     String?
+  status           String?
+  severity         String
+  severitySource   String?
+  primaryUrl       String?
+  cvssScore        Float?
+  cvssVector       String?
+  cvssScoreV3      Float?
+  cvssVectorV3     String?
+  title            String?
+  description      String?
+  publishedDate    DateTime?
+  lastModifiedDate DateTime?
+  references       Json?
+  trivyResult      TrivyResults @relation(fields: [trivyResultsId], references: [id], onDelete: Cascade)
+
+  @@index([trivyResultsId])
+  @@index([vulnerabilityId])
+  @@index([severity])
+  @@index([pkgName])
+  @@index([targetName])
+  @@map("trivy_vulnerabilities")
+}
+
+model TrivyMisconfiguration {
+  id             String       @id @default(cuid())
+  trivyResultsId String
+  targetName     String
+  targetClass    String?
+  targetType     String?
+  checkId        String
+  avdId          String?
+  title          String
+  description    String
+  message        String
+  namespace      String?
+  query          String?
+  severity       String
+  resolution     String?
+  status         String
+  startLine      Int?
+  endLine        Int?
+  code           Json?
+  primaryUrl     String?
+  references     Json?
+  trivyResult    TrivyResults @relation(fields: [trivyResultsId], references: [id], onDelete: Cascade)
+
+  @@index([trivyResultsId])
+  @@index([checkId])
+  @@index([severity])
+  @@index([status])
+  @@map("trivy_misconfigurations")
+}
+
+model TrivySecret {
+  id             String       @id @default(cuid())
+  trivyResultsId String
+  targetName     String
+  ruleId         String
+  category       String
+  severity       String
+  title          String
+  startLine      Int
+  endLine        Int
+  code           Json?
+  match          String?
+  layer          String?
+  trivyResult    TrivyResults @relation(fields: [trivyResultsId], references: [id], onDelete: Cascade)
+
+  @@index([trivyResultsId])
+  @@index([ruleId])
+  @@index([severity])
+  @@map("trivy_secrets")
+}
+
+model DiveResults {
+  id               String       @id @default(cuid())
+  scanMetadataId   String       @unique
+  efficiencyScore  Float
+  sizeBytes        BigInt
+  wastedBytes      BigInt
+  wastedPercent    Float
+  inefficientFiles Json?
+  duplicateFiles   Json?
+  createdAt        DateTime     @default(now())
+  layers           DiveLayer[]
+  scanMetadata     ScanMetadata @relation(fields: [scanMetadataId], references: [id], onDelete: Cascade)
+
+  @@index([scanMetadataId])
+  @@index([efficiencyScore])
+  @@map("dive_results")
+}
+
+model DiveLayer {
+  id            String      @id @default(cuid())
+  diveResultsId String
+  layerId       String
+  layerIndex    Int
+  digest        String
+  sizeBytes     BigInt
+  command       String?
+  addedFiles    Int         @default(0)
+  modifiedFiles Int         @default(0)
+  removedFiles  Int         @default(0)
+  wastedBytes   BigInt      @default(0)
+  fileDetails   Json?
+  diveResult    DiveResults @relation(fields: [diveResultsId], references: [id], onDelete: Cascade)
+
+  @@index([diveResultsId])
+  @@index([layerIndex])
+  @@map("dive_layers")
+}
+
+model SyftResults {
+  id             String        @id @default(cuid())
+  scanMetadataId String        @unique
+  schemaVersion  String?
+  bomFormat      String?
+  specVersion    String?
+  serialNumber   String?
+  packagesCount  Int           @default(0)
+  filesAnalyzed  Int           @default(0)
+  source         Json?
+  distro         Json?
+  createdAt      DateTime      @default(now())
+  packages       SyftPackage[]
+  scanMetadata   ScanMetadata  @relation(fields: [scanMetadataId], references: [id], onDelete: Cascade)
+
+  @@index([scanMetadataId])
+  @@map("syft_results")
+}
+
+model SyftPackage {
+  id            String      @id @default(cuid())
+  syftResultsId String
+  packageId     String
+  name          String
+  version       String
+  type          String
+  foundBy       String?
+  purl          String?
+  cpe           String?
+  language      String?
+  licenses      Json?
+  size          BigInt?
+  locations     Json?
+  layerId       String?
+  metadata      Json?
+  syftResult    SyftResults @relation(fields: [syftResultsId], references: [id], onDelete: Cascade)
+
+  @@index([syftResultsId])
+  @@index([name])
+  @@index([type])
+  @@index([purl])
+  @@map("syft_packages")
+}
+
+model DockleResults {
+  id             String            @id @default(cuid())
+  scanMetadataId String            @unique
+  summary        Json?
+  createdAt      DateTime          @default(now())
+  scanMetadata   ScanMetadata      @relation(fields: [scanMetadataId], references: [id], onDelete: Cascade)
+  violations     DockleViolation[]
+
+  @@index([scanMetadataId])
+  @@map("dockle_results")
+}
+
+model DockleViolation {
+  id              String        @id @default(cuid())
+  dockleResultsId String
+  code            String
+  title           String
+  level           String
+  alerts          Json?
+  dockleResult    DockleResults @relation(fields: [dockleResultsId], references: [id], onDelete: Cascade)
+
+  @@index([dockleResultsId])
+  @@index([code])
+  @@index([level])
+  @@map("dockle_violations")
+}
+
+model OsvResults {
+  id              String             @id @default(cuid())
+  scanMetadataId  String             @unique
+  createdAt       DateTime           @default(now())
+  scanMetadata    ScanMetadata       @relation(fields: [scanMetadataId], references: [id], onDelete: Cascade)
+  vulnerabilities OsvVulnerability[]
+
+  @@index([scanMetadataId])
+  @@map("osv_results")
+}
+
+model OsvVulnerability {
+  id               String     @id @default(cuid())
+  osvResultsId     String
+  osvId            String
+  aliases          Json?
+  packageName      String
+  packageEcosystem String
+  packageVersion   String
+  packagePurl      String?
+  summary          String?
+  details          String?
+  severity         Json?
+  fixed            String?
+  affected         Json?
+  published        DateTime?
+  modified         DateTime?
+  withdrawn        DateTime?
+  references       Json?
+  databaseSpecific Json?
+  osvResult        OsvResults @relation(fields: [osvResultsId], references: [id], onDelete: Cascade)
+
+  @@index([osvResultsId])
+  @@index([osvId])
+  @@index([packageName])
+  @@map("osv_vulnerabilities")
+}
+
+model ScanResult {
+  id           String           @id @default(cuid())
+  scanId       String
+  scannerId    String
+  rawOutput    Json?
+  status       ScanResultStatus @default(SUCCESS)
+  errorMessage String?
+  createdAt    DateTime         @default(now())
+  scan         Scan             @relation(fields: [scanId], references: [id], onDelete: Cascade)
+  scanner      Scanner          @relation(fields: [scannerId], references: [id])
+
+  @@index([scanId])
+  @@index([scannerId])
+  @@index([status])
+  @@map("scan_results")
+}
+
+model Scanner {
+  id            String       @id @default(cuid())
+  name          String       @unique
+  version       String
+  type          ScannerType
+  isActive      Boolean      @default(true)
+  defaultConfig Json?
+  createdAt     DateTime     @default(now())
+  updatedAt     DateTime     @updatedAt
+  scanResults   ScanResult[]
+
+  @@index([name])
+  @@index([type])
+  @@index([isActive])
+  @@map("scanners")
+}
+
+model BulkScanBatch {
+  id           String         @id @default(cuid())
+  totalImages  Int
+  status       BatchStatus
+  patterns     Json
+  createdAt    DateTime       @default(now())
+  updatedAt    DateTime       @updatedAt
+  completedAt  DateTime?
+  errorMessage String?
+  name         String?
+  items        BulkScanItem[]
+
+  @@index([status])
+  @@index([createdAt])
+  @@map("bulk_scan_batches")
+}
+
+model BulkScanItem {
+  id      String        @id @default(cuid())
+  batchId String
+  scanId  String
+  imageId String
+  status  ItemStatus
+  batch   BulkScanBatch @relation(fields: [batchId], references: [id], onDelete: Cascade)
+  image   Image         @relation(fields: [imageId], references: [id], onDelete: Cascade)
+  scan    Scan          @relation(fields: [scanId], references: [id], onDelete: Cascade)
+
+  @@index([batchId])
+  @@index([status])
+  @@map("bulk_scan_items")
+}
+
+model Vulnerability {
+  id                   String               @id @default(cuid())
+  cveId                String               @unique
+  title                String?
+  description          String?
+  severity             Severity
+  cvssScore            Float?
+  source               String?
+  publishedAt          DateTime?
+  modifiedAt           DateTime?
+  imageVulnerabilities ImageVulnerability[]
+
+  @@index([cveId])
+  @@index([severity])
+  @@index([cvssScore])
+  @@map("vulnerabilities")
+}
+
+model ImageVulnerability {
+  id                 String              @id @default(cuid())
+  imageId            String
+  vulnerabilityId    String
+  packageName        String
+  installedVersion   String?
+  fixedVersion       String?
+  status             VulnerabilityStatus @default(DETECTED)
+  detectedAt         DateTime            @default(now())
+  patchStatus        PatchStatus         @default(NOT_ATTEMPTED)
+  cveClassifications CveClassification[]
+  image              Image               @relation(fields: [imageId], references: [id], onDelete: Cascade)
+  vulnerability      Vulnerability       @relation(fields: [vulnerabilityId], references: [id], onDelete: Cascade)
+  patchOperations    PatchOperation[]    @relation("ImageVulnerabilityToPatchOperation")
+
+  @@unique([imageId, vulnerabilityId, packageName])
+  @@index([imageId])
+  @@index([vulnerabilityId])
+  @@index([status])
+  @@index([packageName])
+  @@index([patchStatus])
+  @@index([detectedAt])
+  @@map("image_vulnerabilities")
+}
+
+model CveClassification {
+  id                   String             @id @default(cuid())
+  imageVulnerabilityId String
+  isFalsePositive      Boolean            @default(false)
+  comment              String?
+  createdAt            DateTime           @default(now())
+  updatedAt            DateTime           @updatedAt
+  createdBy            String?
+  imageId              String
+  image                Image              @relation(fields: [imageId], references: [id], onDelete: Cascade)
+  imageVulnerability   ImageVulnerability @relation(fields: [imageVulnerabilityId], references: [id], onDelete: Cascade)
+
+  @@index([imageVulnerabilityId])
+  @@index([imageId])
+  @@index([isFalsePositive])
+  @@map("cve_classifications")
+}
+
+model AuditLog {
+  id        String      @id @default(cuid())
+  eventType EventType
+  category  LogCategory
+  userIp    String
+  userAgent String?
+  userId    String?
+  resource  String?
+  action    LogAction
+  details   Json?
+  metadata  Json?
+  timestamp DateTime    @default(now())
+
+  @@index([eventType])
+  @@index([category])
+  @@index([userIp])
+  @@index([timestamp])
+  @@index([resource])
+  @@map("audit_logs")
+}
+
+model Repository {
+  id                 String                    @id @default(cuid())
+  name               String
+  type               RepositoryType
+  registryUrl        String
+  username           String
+  encryptedPassword  String
+  organization       String?
+  status             RepositoryStatus          @default(UNTESTED)
+  lastTested         DateTime?
+  repositoryCount    Int?
+  createdAt          DateTime                  @default(now())
+  updatedAt          DateTime                  @updatedAt
+  protocol           String                    @default("https")
+  apiVersion         String?
+  authUrl            String?                   // JWT auth endpoint for GitLab Registry
+  groupId            String?                   // GitLab group ID for scoped access
+  skipTlsVerify      Boolean                   @default(false) // Skip TLS verification for self-signed certs
+  registryPort       Int?                      // Custom registry port (e.g., 5050 for GitLab)
+  capabilities       Json?
+  rateLimits         Json?
+  healthCheck        Json?
+  primaryImages      Image[]                   @relation("PrimaryRepository")
+  imageMetadataCache RepositoryImageMetadata[]
+  images             RepositoryImage[]
+
+  @@unique([registryUrl, username])
+  @@index([type])
+  @@index([status])
+  @@index([createdAt])
+  @@index([type, status])
+  @@index([registryUrl])
+  @@index([status, type])
+  @@map("repositories")
+}
+
+model RepositoryImage {
+  id           String     @id @default(cuid())
+  repositoryId String
+  imageId      String
+  namespace    String?
+  imageName    String
+  discoveredAt DateTime   @default(now())
+  lastSynced   DateTime?
+  syncStatus   SyncStatus @default(PENDING)
+  image        Image      @relation(fields: [imageId], references: [id], onDelete: Cascade)
+  repository   Repository @relation(fields: [repositoryId], references: [id], onDelete: Cascade)
+
+  @@unique([repositoryId, imageId])
+  @@unique([repositoryId, namespace, imageName])
+  @@index([repositoryId])
+  @@index([imageId])
+  @@map("repository_images")
+}
+
+model RepositoryImageMetadata {
+  id            String     @id @default(cuid())
+  repositoryId  String
+  namespace     String?
+  imageName     String
+  description   String?
+  isPrivate     Boolean    @default(false)
+  starCount     Int?
+  pullCount     BigInt?
+  lastUpdated   DateTime?
+  availableTags Json?
+  cachedAt      DateTime   @default(now())
+  expiresAt     DateTime
+  cacheHit      Boolean    @default(false)
+  repository    Repository @relation(fields: [repositoryId], references: [id], onDelete: Cascade)
+
+  @@unique([repositoryId, namespace, imageName])
+  @@index([repositoryId])
+  @@index([expiresAt])
+  @@map("repository_image_metadata")
+}
+
+model ScanVulnerabilityFinding {
+  id               String    @id @default(cuid())
+  scanId           String
+  source           String
+  cveId            String
+  packageName      String
+  installedVersion String?
+  fixedVersion     String?
+  severity         Severity
+  cvssScore        Float?
+  dataSource       String?
+  vulnerabilityUrl String?
+  title            String?
+  description      String?
+  publishedDate    DateTime?
+  lastModified     DateTime?
+  filePath         String?
+  layerId          String?
+  packageType      String?
+  rawFinding       Json?
+  createdAt        DateTime  @default(now())
+  scan             Scan      @relation(fields: [scanId], references: [id], onDelete: Cascade)
+
+  @@index([scanId])
+  @@index([cveId])
+  @@index([source])
+  @@index([severity])
+  @@index([packageName])
+  @@index([scanId, cveId, source])
+  @@map("scan_vulnerability_findings")
+}
+
+model ScanPackageFinding {
+  id            String   @id @default(cuid())
+  scanId        String
+  source        String
+  packageName   String
+  version       String?
+  type          String
+  purl          String?
+  license       String?
+  vendor        String?
+  publisher     String?
+  ecosystem     String?
+  language      String?
+  filePath      String?
+  layerId       String?
+  installedSize BigInt?
+  metadata      Json?
+  dependencies  Json?
+  createdAt     DateTime @default(now())
+  scan          Scan     @relation(fields: [scanId], references: [id], onDelete: Cascade)
+
+  @@index([scanId])
+  @@index([packageName])
+  @@index([source])
+  @@index([type])
+  @@index([ecosystem])
+  @@map("scan_package_findings")
+}
+
+model ScanComplianceFinding {
+  id          String   @id @default(cuid())
+  scanId      String
+  source      String
+  ruleId      String
+  ruleName    String
+  category    String
+  severity    Severity
+  message     String
+  description String?
+  remediation String?
+  filePath    String?
+  lineNumber  Int?
+  code        String?
+  rawFinding  Json?
+  createdAt   DateTime @default(now())
+  scan        Scan     @relation(fields: [scanId], references: [id], onDelete: Cascade)
+
+  @@index([scanId])
+  @@index([ruleId])
+  @@index([source])
+  @@index([severity])
+  @@index([category])
+  @@map("scan_compliance_findings")
+}
+
+model ScanEfficiencyFinding {
+  id              String   @id @default(cuid())
+  scanId          String
+  source          String
+  findingType     String
+  severity        String
+  layerId         String?
+  layerIndex      Int?
+  layerCommand    String?
+  sizeBytes       BigInt?
+  wastedBytes     BigInt?
+  efficiencyScore Float?
+  description     String
+  filePaths       Json?
+  rawFinding      Json?
+  createdAt       DateTime @default(now())
+  scan            Scan     @relation(fields: [scanId], references: [id], onDelete: Cascade)
+
+  @@index([scanId])
+  @@index([findingType])
+  @@index([source])
+  @@index([layerId])
+  @@map("scan_efficiency_findings")
+}
+
+model ScanFindingCorrelation {
+  id              String    @id @default(cuid())
+  scanId          String
+  findingType     String
+  correlationKey  String
+  sources         Json
+  sourceCount     Int
+  confidenceScore Float
+  severity        Severity?
+  createdAt       DateTime  @default(now())
+  scan            Scan      @relation(fields: [scanId], references: [id], onDelete: Cascade)
+
+  @@unique([scanId, findingType, correlationKey])
+  @@index([scanId])
+  @@index([correlationKey])
+  @@index([sourceCount])
+  @@map("scan_finding_correlations")
+}
+
+model PatchOperation {
+  id                   String               @id @default(cuid())
+  sourceImageId        String
+  patchedImageId       String?
+  scanId               String
+  status               PatchOperationStatus @default(PENDING)
+  strategy             PatchStrategy
+  startedAt            DateTime             @default(now())
+  completedAt          DateTime?
+  errorMessage         String?
+  vulnerabilitiesCount Int                  @default(0)
+  patchedCount         Int                  @default(0)
+  failedCount          Int                  @default(0)
+  buildahContainerId   String?
+  buildahMountPath     String?
+  patchedImageRegistry String?
+  patchedImageName     String?
+  patchedImageTag      String?
+  patchedImageDigest   String?
+  patchedImage         Image?               @relation("PatchedImage", fields: [patchedImageId], references: [id])
+  scan                 Scan                 @relation(fields: [scanId], references: [id], onDelete: Cascade)
+  sourceImage          Image                @relation("PatchSourceImage", fields: [sourceImageId], references: [id], onDelete: Cascade)
+  patchResults         PatchResult[]
+  vulnerabilities      ImageVulnerability[] @relation("ImageVulnerabilityToPatchOperation")
+
+  @@index([sourceImageId])
+  @@index([patchedImageId])
+  @@index([scanId])
+  @@index([status])
+  @@index([startedAt])
+  @@map("patch_operations")
+}
+
+model PatchResult {
+  id               String            @id @default(cuid())
+  patchOperationId String
+  vulnerabilityId  String
+  cveId            String
+  packageName      String
+  originalVersion  String?
+  targetVersion    String?
+  patchCommand     String
+  status           PatchResultStatus @default(PENDING)
+  errorMessage     String?
+  executedAt       DateTime?
+  packageManager   String
+  patchOperation   PatchOperation    @relation(fields: [patchOperationId], references: [id], onDelete: Cascade)
+
+  @@index([patchOperationId])
+  @@index([vulnerabilityId])
+  @@index([status])
+  @@map("patch_results")
+}
+
+model PatchedImage {
+  id                String   @id @default(cuid())
+  originalImageId   String
+  patchedImageId    String   @unique
+  patchOperationId  String   @unique
+  originalCveCount  Int
+  remainingCveCount Int
+  patchedCveCount   Int
+  patchEfficiency   Float
+  originalSize      BigInt?
+  patchedSize       BigInt?
+  sizeDelta         BigInt?
+  createdAt         DateTime @default(now())
+  originalImage     Image    @relation("PatchedImageOriginal", fields: [originalImageId], references: [id], onDelete: Cascade)
+  patchedImage      Image    @relation("PatchedImageResult", fields: [patchedImageId], references: [id], onDelete: Cascade)
+
+  @@index([originalImageId])
+  @@index([patchedImageId])
+  @@index([createdAt])
+  @@map("patched_images")
+}
+
+enum RepositoryType {
+  DOCKERHUB
+  GHCR
+  GITLAB
+  GENERIC
+  ECR
+  GCR
+  ACR
+  HARBOR
+  NEXUS
+  ARTIFACTORY
+  QUAY
+}
+
+enum RepositoryStatus {
+  UNTESTED
+  ACTIVE
+  ERROR
+}
+
+enum SyncStatus {
+  PENDING
+  SYNCING
+  COMPLETED
+  FAILED
+  STALE
+}
+
+enum ScanStatus {
+  PENDING
+  RUNNING
+  SUCCESS
+  PARTIAL
+  FAILED
+  CANCELLED
+}
+
+enum ScanResultStatus {
+  SUCCESS
+  FAILED
+  PARTIAL
+}
+
+enum ScannerType {
+  VULNERABILITY
+  COMPLIANCE
+  SBOM
+  ANALYSIS
+}
+
+enum BatchStatus {
+  PENDING
+  RUNNING
+  COMPLETED
+  FAILED
+  CANCELLED
+}
+
+enum ItemStatus {
+  PENDING
+  RUNNING
+  SUCCESS
+  FAILED
+  CANCELLED
+}
+
+enum Severity {
+  CRITICAL
+  HIGH
+  MEDIUM
+  LOW
+  INFO
+}
+
+enum VulnerabilityStatus {
+  DETECTED
+  FIXED
+  IGNORED
+  FALSE_POSITIVE
+}
+
+enum ImageSource {
+  REGISTRY
+  LOCAL_DOCKER
+  FILE_UPLOAD
+  REGISTRY_PRIVATE
+}
+
+enum EventType {
+  SCAN_START
+  SCAN_COMPLETE
+  SCAN_FAILED
+  IMAGE_ADDED
+  IMAGE_REMOVED
+  USER_LOGIN
+  CONFIG_CHANGE
+  SYSTEM_EVENT
+}
+
+enum LogCategory {
+  SECURITY
+  OPERATIONAL
+  INFORMATIVE
+  ERROR
+}
+
+enum LogAction {
+  CREATE
+  UPDATE
+  DELETE
+  VIEW
+  SCAN
+  UPLOAD
+  DOWNLOAD
+  LOGIN
+  LOGOUT
+}
+
+enum PatchStatus {
+  NOT_ATTEMPTED
+  ANALYZING
+  PATCHABLE
+  NOT_PATCHABLE
+  PATCHING
+  PATCHED
+  PATCH_FAILED
+}
+
+enum PatchOperationStatus {
+  PENDING
+  ANALYZING
+  BUILDING
+  PATCHING
+  PUSHING
+  COMPLETED
+  FAILED
+  CANCELLED
+  PULLING
+  VERIFYING
+}
+
+enum PatchResultStatus {
+  PENDING
+  SUCCESS
+  FAILED
+  SKIPPED
+}
+
+enum PatchStrategy {
+  APT
+  YUM
+  APK
+  NPM
+  PIP
+  MULTI
+}
+
+model ScheduledScan {
+  id                  String                @id @default(cuid())
+  name                String
+  description         String?
+  schedule            String?               // Cron expression for scheduled scans
+  enabled             Boolean               @default(true)
+  nextRunAt           DateTime?
+  lastRunAt           DateTime?
+  createdAt           DateTime              @default(now())
+  updatedAt           DateTime              @updatedAt
+  createdBy           String?
+  source              ScheduledScanSource   @default(MANUAL)
+  imageSelectionMode  ImageSelectionMode    @default(SPECIFIC)
+  imagePattern        String?               // Regex pattern for bulk selection
+  scanHistory         ScheduledScanHistory[]
+  selectedImages      ScheduledScanImage[]
+
+  @@index([enabled])
+  @@index([nextRunAt])
+  @@index([source])
+  @@map("scheduled_scans")
+}
+
+model ScheduledScanImage {
+  id               String         @id @default(cuid())
+  scheduledScanId  String
+  imageId          String
+  imageName        String
+  imageTag         String
+  registry         String?
+  addedAt          DateTime       @default(now())
+  scheduledScan    ScheduledScan  @relation(fields: [scheduledScanId], references: [id], onDelete: Cascade)
+  image            Image          @relation(fields: [imageId], references: [id], onDelete: Cascade)
+
+  @@unique([scheduledScanId, imageId])
+  @@index([scheduledScanId])
+  @@index([imageId])
+  @@map("scheduled_scan_images")
+}
+
+model ScheduledScanHistory {
+  id                String                   @id @default(cuid())
+  scheduledScanId   String
+  executionId       String                   @unique
+  startedAt         DateTime                 @default(now())
+  completedAt       DateTime?
+  status            ScheduledScanStatus      @default(RUNNING)
+  totalImages       Int
+  scannedImages     Int                      @default(0)
+  failedImages      Int                      @default(0)
+  errorMessage      String?
+  triggerSource     ScheduledScanTrigger     @default(SCHEDULED)
+  triggeredBy       String?
+  scheduledScan     ScheduledScan            @relation(fields: [scheduledScanId], references: [id], onDelete: Cascade)
+  auditInfo         Json?                    // Additional audit information
+  scanResults       ScheduledScanResult[]
+
+  @@index([scheduledScanId])
+  @@index([startedAt])
+  @@index([status])
+  @@index([executionId])
+  @@map("scheduled_scan_history")
+}
+
+model ScheduledScanResult {
+  id                     String                @id @default(cuid())
+  scheduledScanHistoryId String
+  scanId                 String?
+  imageId                String
+  imageName              String
+  imageTag               String
+  status                 ScanStatus
+  startedAt              DateTime
+  completedAt            DateTime?
+  vulnerabilityCritical  Int                   @default(0)
+  vulnerabilityHigh      Int                   @default(0)
+  vulnerabilityMedium    Int                   @default(0)
+  vulnerabilityLow       Int                   @default(0)
+  errorMessage           String?
+  history                ScheduledScanHistory  @relation(fields: [scheduledScanHistoryId], references: [id], onDelete: Cascade)
+  scan                   Scan?                 @relation(fields: [scanId], references: [id], onDelete: Cascade)
+
+  @@index([scheduledScanHistoryId])
+  @@index([scanId])
+  @@index([status])
+  @@map("scheduled_scan_results")
+}
+
+enum ScheduledScanSource {
+  MANUAL
+  AUTOMATED
+}
+
+enum ImageSelectionMode {
+  SPECIFIC     // Specific images selected
+  PATTERN      // Pattern-based selection
+  ALL          // All images
+  REPOSITORY   // All from specific repository
+}
+
+enum ScheduledScanStatus {
+  PENDING
+  RUNNING
+  COMPLETED
+  FAILED
+  CANCELLED
+  PARTIAL
+}
+
+enum ScheduledScanTrigger {
+  MANUAL
+  SCHEDULED
+  API
+}
