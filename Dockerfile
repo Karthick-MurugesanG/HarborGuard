@@ -4,7 +4,7 @@ WORKDIR /app
 
 RUN apk add --no-cache python3 make g++
 COPY package.json package-lock.json* pnpm-lock.yaml* yarn.lock* ./
-RUN npm ci --ignore-scripts
+RUN npm ci 
 
 COPY . .
 RUN mv .env.example .env
